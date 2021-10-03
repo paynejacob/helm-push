@@ -1,5 +1,5 @@
 #!/bin/bash
-set -e
+set -ex
 
 if [ -z "$CHART_FOLDER" ]; then
   echo "Chart folder is required but not defined."
@@ -30,9 +30,13 @@ if [ "$USE_OCI_REGISTRY" == "TRUE" ] || [ "$USE_OCI_REGISTRY" == "true" ]; then
   REGISTRY=$(echo "${REGISTRY_URL}" | awk -F[/:] '{print $4}') # Get registry host from url
   echo "${REGISTRY_ACCESS_TOKEN}" | helm registry login -u ${REGISTRY_USERNAME} --password-stdin ${REGISTRY} # Authenticate registry
   REGISTRY_URL=$(echo "${REGISTRY_URL#*//}")
-  helm chart save ${CHART_FOLDER} ${REGISTRY_URL} # Save the chart, using tag from the chart
-  FULLPACKAGEREF=$(helm chart list | sed '2q;d' | cut -d' ' -f1) # Get full package reference from newly saved chart
-  helm chart push ${FULLPACKAGEREF} # Push chart to registry
+ 
+  cd ${CHART_FOLDER}
+  helm repo add stable https://charts.helm.sh/stable
+  helm repo update
+  helm lint .
+  helm package --app-version ${REGISTRY_APPVERSION} --version ${REGISTRY_VERSION} .
+  helm push *.tgz oci://${REGISTRY_URL} # Push chart to registry
   exit 0
 fi
 
@@ -68,6 +72,6 @@ cd ${CHART_FOLDER}
 helm repo add stable https://charts.helm.sh/stable
 helm repo update
 helm lint .
-helm package . ${REGISTRY_APPVERSION} ${REGISTRY_VERSION}
+helm package --app-version ${REGISTRY_APPVERSION} --version ${REGISTRY_VERSION} .
 helm inspect chart *.tgz
 helm push *.tgz ${REGISTRY_URL} ${REGISTRY_USERNAME} ${REGISTRY_PASSWORD} ${REGISTRY_ACCESS_TOKEN} ${FORCE}
